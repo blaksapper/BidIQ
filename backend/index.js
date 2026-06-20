@@ -3,7 +3,8 @@ const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const PDFDocument = require('pdfkit');
+const PDFDocument = require('pdfkit'); // Back to standard pdfkit for simplicity
+const { runAgent1, runAgent2, runAgent3, runAgent4, runAgent5 } = require('./agents');
 require('dotenv').config();
 
 const app = express();
@@ -11,176 +12,112 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
-
-// Serve static files from the frontend build
 app.use(express.static(path.join(__dirname, '../frontend/dist')));
 
-// File upload setup
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const uploadDir = path.join(__dirname, 'uploads');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir);
-    }
+    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
     cb(null, uploadDir);
   },
   filename: (req, file, cb) => {
     cb(null, Date.now() + '-' + file.originalname);
   }
 });
-
 const upload = multer({ storage });
 
-// AI Pipeline Stubs with semi-realistic data
-async function runAgent1(data) { 
-  return { 
-    status: 'success', 
-    projectTitle: `${data.projectType} Project in ${data.location}`,
-    details: { projectType: data.projectType, location: data.location, tradeType: data.tradeType }
-  }; 
-}
-
-async function runAgent2(context) { 
-  return { 
-    status: 'success', 
-    materials: [
-      { item: 'Lumber (various sizes)', quantity: '500 linear ft', costRange: '$1,200 - $1,500' },
-      { item: 'Drywall Sheets (4x8)', quantity: '40 sheets', costRange: '$600 - $800' },
-      { item: 'Screws and Fasteners', quantity: '10 boxes', costRange: '$100 - $150' }
-    ] 
-  }; 
-}
-
-async function runAgent3(context) { 
-  return { 
-    status: 'success', 
-    labor: [
-      { trade: 'Framing', hours: '40 hrs', rate: '$45/hr', total: '$1,800' },
-      { trade: 'Drywall Installation', hours: '24 hrs', rate: '$35/hr', total: '$840' }
-    ] 
-  }; 
-}
-
-async function runAgent4(context) { 
-  return { 
-    status: 'success', 
-    risks: ['Lead time on specialty lumber is 3 weeks', 'Permit delays expected in this area'],
-    gaps: ['Electrical scope not fully defined in plans']
-  }; 
-}
-
-async function runAgent5(context) { 
-  const { a1Result, a2Result, a3Result, a4Result } = context;
-  return { 
-    status: 'success', 
-    report: {
-      title: `Bid Estimate Report - ${a1Result.projectTitle}`,
-      date: new Date().toLocaleDateString(),
-      overview: a1Result.details,
-      materials: a2Result.materials,
-      labor: a3Result.labor,
-      risks: a4Result.risks,
-      gaps: a4Result.gaps,
-      totalEstimate: '$4,540 - $5,090'
-    } 
-  }; 
-}
-
-// Function to generate PDF
-function generatePDF(report, outputPath) {
+async function generatePDF(report, outputPath) {
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument();
-    const stream = fs.createWriteStream(outputPath);
-    doc.pipe(stream);
+    try {
+      const doc = new PDFDocument({ margin: 50 });
+      const stream = fs.createWriteStream(outputPath);
+      doc.pipe(stream);
 
-    doc.fontSize(20).text(report.title, { align: 'center' });
-    doc.fontSize(12).text(`Date: ${report.date}`, { align: 'center' });
-    doc.moveDown();
+      // Header
+      doc.fontSize(20).text('BidIQ Estimate Report', { align: 'center' });
+      doc.fontSize(14).text(report.title, { align: 'center' });
+      doc.fontSize(10).text(`Generated on: ${report.date}`, { align: 'center' });
+      doc.moveDown();
 
-    doc.fontSize(16).text('Project Overview');
-    doc.fontSize(12).text(`Project Type: ${report.overview.projectType}`);
-    doc.text(`Location: ${report.overview.location}`);
-    doc.text(`Trade Type: ${report.overview.tradeType}`);
-    doc.moveDown();
+      // 1. Project Overview
+      doc.fontSize(16).text('1. PROJECT OVERVIEW');
+      doc.fontSize(12).text(`Project Name: ${report.overview.name}`);
+      doc.text(`Type: ${report.overview.type}`);
+      doc.text(`Location: ${report.overview.location}`);
+      doc.text(`Summary: ${report.overview.summary}`);
+      doc.text('Assumptions:');
+      report.overview.assumptions.forEach(a => doc.text(`- ${a}`));
+      doc.moveDown();
 
-    doc.fontSize(16).text('Materials Breakdown');
-    report.materials.forEach(m => {
-      doc.fontSize(12).text(`${m.item} - ${m.quantity}: ${m.costRange}`);
-    });
-    doc.moveDown();
+      // 2. Summary
+      doc.fontSize(16).text('2. ESTIMATE SUMMARY');
+      doc.fontSize(12).text(`Materials: ${report.summaryTable.materials}`);
+      doc.text(`Labor: ${report.summaryTable.labor}`);
+      doc.text(`Permits: ${report.summaryTable.permits}`);
+      doc.text(`Contingency: ${report.summaryTable.contingency}`);
+      doc.fontSize(14).text(`TOTAL BID RANGE: ${report.summaryTable.totalBidRange}`, { bold: true });
+      doc.moveDown();
 
-    doc.fontSize(16).text('Labor Breakdown');
-    report.labor.forEach(l => {
-      doc.fontSize(12).text(`${l.trade} - ${l.hours} @ ${l.rate}: ${l.total}`);
-    });
-    doc.moveDown();
+      // 3. Materials
+      doc.fontSize(16).text('3. MATERIALS BREAKDOWN');
+      report.materials.forEach(m => {
+        doc.fontSize(10).text(`${m.item} (${m.quantity} ${m.unit}): ${m.costRange}`);
+      });
+      doc.moveDown();
 
-    doc.fontSize(16).text('Risk Flags & Scope Gaps');
-    doc.fontSize(12).text('Risks:');
-    report.risks.forEach(r => doc.text(`- ${r}`));
-    doc.text('Gaps:');
-    report.gaps.forEach(g => doc.text(`- ${g}`));
-    doc.moveDown();
+      // 4. Labor
+      doc.fontSize(16).text('4. LABOR BREAKDOWN');
+      report.labor.forEach(l => {
+        doc.fontSize(10).text(`${l.trade} (${l.hours}): ${l.totalCostRange}`);
+      });
+      doc.moveDown();
 
-    doc.fontSize(18).text(`Total Estimated Range: ${report.totalEstimate}`, { align: 'right' });
-    doc.moveDown();
+      // 5 & 6 Risks and Missing
+      doc.fontSize(16).text('5. RISK FLAGS');
+      report.risks.forEach(r => doc.fontSize(10).text(`[ ] ${r}`));
+      doc.moveDown();
 
-    doc.fontSize(10).text('Disclaimer: This estimate is generated by AI for planning purposes. All figures should be verified by a licensed contractor before submitting a formal bid.', {
-      align: 'center',
-      oblique: true
-    });
+      doc.fontSize(16).text('6. MISSING ITEMS');
+      report.missingItems.forEach(m => doc.fontSize(10).text(`[ ] ${m}`));
+      doc.moveDown();
 
-    doc.end();
-    stream.on('finish', resolve);
-    stream.on('error', reject);
+      // Footer
+      doc.fontSize(8).text('Disclaimer: This estimate is generated by AI for planning purposes. All figures should be verified by a licensed contractor before submitting a formal bid.', 50, doc.page.height - 50, { align: 'center' });
+
+      doc.end();
+      stream.on('finish', resolve);
+      stream.on('error', reject);
+    } catch (err) {
+      reject(err);
+    }
   });
 }
 
-app.post('/api/estimate', upload.fields([
-  { name: 'plans', maxCount: 5 },
-  { name: 'scope', maxCount: 1 }
-]), async (req, res) => {
+app.post('/api/estimate', upload.fields([{ name: 'plans' }, { name: 'scope' }]), async (req, res) => {
   try {
-    const { projectType, location, tradeType, targetBidDate, notes } = req.body;
-    const plansFiles = req.files['plans'];
-    const scopeFile = req.files['scope'];
-
-    // Pipeline Execution
-    const a1Result = await runAgent1({ projectType, location, tradeType, plansFiles, scopeFile, notes });
+    const { projectType, location, tradeType, scopeOfWork } = req.body;
+    const a1Result = await runAgent1({ projectType, location, tradeType, scopeOfWork });
     const [a2Result, a3Result] = await Promise.all([runAgent2(a1Result), runAgent3(a1Result)]);
     const a4Result = await runAgent4({ a1Result, a2Result, a3Result });
     const a5Result = await runAgent5({ a1Result, a2Result, a3Result, a4Result });
 
-    // Generate PDF report
     const pdfFilename = `report-${Date.now()}.pdf`;
     const pdfPath = path.join(__dirname, 'uploads', pdfFilename);
     await generatePDF(a5Result.report, pdfPath);
 
-    res.json({
-      success: true,
-      report: a5Result.report,
-      pdfUrl: `/api/download/${pdfFilename}`
-    });
+    res.json({ success: true, report: a5Result.report, pdfUrl: `/api/download/${pdfFilename}` });
   } catch (error) {
-    console.error('Pipeline error:', error);
+    console.error(error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
 app.get('/api/download/:filename', (req, res) => {
   const filePath = path.join(__dirname, 'uploads', req.params.filename);
-  if (fs.existsSync(filePath)) {
-    res.download(filePath);
-  } else {
-    res.status(404).send('File not found');
-  }
+  if (fs.existsSync(filePath)) res.download(filePath);
+  else res.status(404).send('File not found');
 });
 
-// Fallback to frontend index.html for any non-API routes
-app.use((req, res) => {
-  res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
-});
+app.use((req, res) => res.sendFile(path.join(__dirname, '../frontend/dist/index.html')));
 
-app.listen(PORT, () => {
-  console.log(`Backend server running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

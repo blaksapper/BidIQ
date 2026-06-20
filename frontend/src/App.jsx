@@ -69,7 +69,7 @@ function App() {
   return (
     <div className="App">
       <header className="App-header">
-        <h1>BidBot — AI Construction Estimator</h1>
+        <h1>BidIQ — AI Construction Estimator</h1>
       </header>
       <main>
         {!result ? (
@@ -122,7 +122,7 @@ function App() {
             <h2>Estimate Generated Successfully!</h2>
             <div className="report-summary">
               <h3>{result.report.title}</h3>
-              <p><strong>Total Estimated Range:</strong> {result.report.totalEstimate}</p>
+              <p><strong>Total Estimated Range:</strong> {result.report.summaryTable.totalBidRange}</p>
               <a 
                 href={result.pdfUrl} 
                 target="_blank" 
